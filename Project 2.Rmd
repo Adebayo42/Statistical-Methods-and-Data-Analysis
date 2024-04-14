@@ -1,0 +1,1031 @@
+---
+title: "MAP501 Coursework 2023"
+output:
+  html_document:
+    theme: journal
+    self_contained: true
+    highlight: textmate  # specifies the syntax highlighting style
+    toc: true # should a table of contents (TOC) be shown in the document?
+    toc_float: false
+    toc_depth: 2 # the number of levels (e.g. section, subsection, subsubsection) shown in the TOC
+    number_sections: true # should the sections be numbered?
+    df_print: paged
+
+---
+# Preamble
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  comment = "",
+  results = "hold",
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 6,
+  fig.height = 3.5,
+  fig.align = "center"
+)
+```
+
+```{r, message = FALSE, warning = FALSE}
+
+#install.packages("AER")
+#install.packages("caret")
+#install.packages("merTools")
+
+library("merTools")
+library("tidyverse")
+library("magrittr")
+library("here")
+library("janitor")
+library("lubridate")
+library("gridExtra")
+library("readxl")
+library("glmnet")
+library("Lahman")
+library("AER")
+library("viridis")
+library("lindia")
+library("lme4")
+library("caret")
+library("pROC")
+
+
+
+
+```
+
+
+# Datasets
+
+<div style="text-align: justify;">
+
+In this coursework, you will be using several datasets about baseball from the package 'Lahman'. You can access the list of datasets and all of the variables contained in each one by examining this package in the Packages tab in RStudio.
+
+</div>
+
+# Simple Linear Regression [35 points]
+
+<div style="text-align: justify;">
+
+&nbsp;  
+a.	**Create 'df_MeanSalaries' by taking the data from the years 1990 to 2010 from ‘Salaries’. Add the variable 'meanSalary' = the mean salary for each team per year. Ensure that there is a single row for each team per year. Use 'df_MeanSalaries' for the rest of question 1. [2 points] **
+
+</div>
+
+```{r}
+
+## Check for NA
+# 
+# Lahman::Salaries %>% 
+#   summarise_all(~ sum(is.na(.)))
+
+## Create df_MeanSalaries
+
+df_MeanSalaries <- Lahman::Salaries %>% 
+  filter(
+    yearID >= 1990 & yearID <= 2010
+  ) %>%
+  group_by(
+    yearID, teamID
+  ) %>% 
+  summarise(
+    meanSalary = mean(salary)
+  ) 
+
+
+
+```
+<div style="text-align: justify;">
+
+&nbsp;  
+
+b.	**Create one plot of team mean salaries over time from 1990 to 2010 and another of the log base 10 of team mean salaries over the same period. Comment and compare the two plots. [4 points] **
+
+</div>
+
+
+```{r}
+
+## Relationship Between Average Team Salaries Vs Year
+
+df_MeanSalaries %>% 
+  ggplot(aes(x = yearID, y = meanSalary)) +
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE, color = "green") +
+  labs(
+    x = "Year",
+    y = "Average Team Salaries ($)",
+    title = "Relationship Between Average Team Salaries Vs Year",
+    subtitle = "There is a possitive linear relationship between the two variables"
+  ) +
+  theme_classic()
+
+## Relationship Between log Average Team Salaries Vs Year
+
+df_MeanSalaries %>% 
+  ggplot(aes(x = yearID, y = log10(meanSalary))) +
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE, color = "green") +
+  labs(
+    x = "Year",
+    y = "log(Average Team Salaries",
+    title = "Relationship Between Log of Average Team Salaries Vs Year",
+    subtitle = "There is a possitive linear relationship between the two variables"
+  ) +
+  theme_classic()
+
+
+
+```
+
+<u>Comments</u>
+
+<div style="text-align: justify;">
+
+In the first plot (Avg Team Salaries Vs Year), there is a positive linear relationship between the average team salaries and year. The concentration of points in the lower band of y-axis indicates that a significant number of average team salaries is below $ $4 \times 10^6$. For the other plot (log10 Avg Team Salaries Vs Year), the points are higher up the y-axis due to the transformation using log10 and similarly, there is a positive linear relationship between the log-transformed average salaries and year. The log-transformation helps to spread out the points, making differences in average salaries distribution across years more visible compared to the first plot.
+
+</div>
+
+<div style="text-align: justify;">
+
+&nbsp;  
+
+c.	**Fit a model of $log_{10}$ of team mean salaries as a function of year. Report and interpret the results. Write the form of the fitted model (coefficients should be rounded to 2 significant figures). [10 points] **
+
+</div>
+
+```{r}
+
+## Building the Gaussian Linear Model
+
+model1 <- lm(log10(meanSalary) ~ yearID, data = df_MeanSalaries)
+
+## Model Summary
+
+summary(model1)
+
+b0 <- round(coefficients(model1)[1],2)
+b1 <- round(coefficients(model1)[2],2)
+
+sig <- round(summary(model1)$sigma,2)
+
+
+
+
+```
+
+<div style="text-align: justify;">
+
+&nbsp;  
+
+The fitted model is of the below form: 
+
+$log_{10}$  meanSalary $\sim$ $N$(`r b0` $+$ `r b1` $\times$ yearID, `r sig`)
+
+<u>Model Interpretation</u>
+
+1. The p_value of the fitted linear regression model is $2.2 \times 10^{-16}$ which is less than $0.05$. Hence, we reject the null hypothesis and accept the alternate hypothesis that there is a significant relationship between the yearID (predictor variable) and the log of the meanSalary (response variable)
+
+2. For each one year increase in the yearID, the log of the meanSalary is expected to increase by $0.04
+
+3. The Multiple R-squared of the model is 0.58, which indicates that 58% of the variability of log meanSalary (response) is explained by the yearID (predictor)
+
+4. The fitted model F-statistic is 832.3 on 1 and 606 DF and has a standard deviation of `r sig`
+
+</div>
+
+<div style="text-align: justify;">
+
+&nbsp;  
+
+d.	**State and evaluate the assumptions of the fitted model. [9 points] **
+
+</div>
+
+```{r}
+gg_diagnose(model1, max.per.page = 1)
+
+```
+
+<div style="text-align: justify;">
+
+&nbsp;  
+
+Estimation of and inference from the fitted regression model is dependent on the below highlighted assumptions;
+
+1. We have assumed that the linearity of the model is correct
+
+2. We have assumed that the errors are independent, have equal variance
+
+3. We assumed that the errors are normally distributed.
+
+4. Independence of observation
+
+To confirm the reasonability of the fitted model we need to evaluate the above assumptions;
+
+1. **Linearity**: Eyeballing the scatter plots of $log_{10}$ meanSalary versus yearID which is roughly linear. Hence, we confirm the assumption of linearity of the response variable ($log_{10}$) versus yearID is reasonable
+
+2. **Homoscedasticity**: the scatter plot of the Residual vs. yearID shows a constant symmetrical variation in the vertical direction and no indication of trend is observed in the plot. Hence, the homoscedasticity assumption is reasonable
+
+3. **Normality**: the Normal-QQ plot which compares the residuals to ideal normal observations shows residuals follow the line approximately and looks roughly like a straight line. Also, checking the Histogram of Residuals, we observed it has a fairly bell shape. Hence, the normality assumption is reasonable
+
+4. **Independence of Observation**: From the data used to fit the model, we observed no systematic dependencies. Hence, the assumption of independent observations appears to be reasonable
+
+</div>
+
+&nbsp;  
+
+
+
+e. **Plot confidence and prediction bands for this model. Colour the points according to a third variable from any of Lahman dataset (apart from ‘Salaries’). Comment on what you find. Find out what teams do they relate to the points that appear outside the prediction band. [10 points] **
+
+
+```{r}
+
+## Create Rank Table
+
+df_Rank <- Lahman::Teams %>% 
+  filter(
+     yearID >= 1990 & yearID <= 2010
+  ) %>% 
+  dplyr::select(teamID, yearID, Rank) %>% 
+  mutate(
+    Rank = as_factor(Rank)
+  )
+
+
+  
+## Confidence Band
+
+df_MeanSalaries %>%
+  left_join(df_Rank) %>% 
+  ggplot(aes(x = yearID, y = log10(meanSalary), color = Rank)) +
+  geom_point() +
+  geom_smooth(method = lm, color = "#2C3E50") +
+  
+  labs(
+    x = "Year",
+    y = "log(Average Team Salaries",
+    title = "Confidence Band",
+     ) +
+  theme_classic()
+
+## Prediction Band
+
+pred1 <- predict(model1, interval = "prediction" )
+
+
+df_MeanSalaries_pred <- cbind(df_MeanSalaries, pred1)
+
+df_MeanSalaries_pred %>%
+  left_join(df_Rank) %>%
+  ggplot(aes(x = yearID, y = log10(meanSalary), color = Rank)) +
+  geom_point() +
+  geom_smooth(method = lm, color = "#2C3E50") +
+  geom_line(aes(y = lwr), color = 2, lty = 2) +
+  geom_line(aes(y = upr), color = 2, lty = 2) +
+  
+  labs(
+    x = "Year",
+    y = "log(Average Team Salaries",
+    title = "Prediction Band",
+    ) +
+  theme_classic()
+
+
+##-Teams with Log mean salary lower than prediction lower limit
+
+teams_lwr <- df_MeanSalaries_pred %>% 
+  mutate(
+    log_meanSalary = log10(meanSalary)
+  ) %>% 
+  filter(
+  log_meanSalary < lwr 
+  
+  )
+
+## Teams with Log mean salary greater than prediction upper limit
+
+teams_upr <-df_MeanSalaries_pred %>% 
+  mutate(
+    log_meanSalary = log10(meanSalary)
+  ) %>% 
+  filter(
+  log_meanSalary > upr 
+  
+  )
+
+teams_lwr
+teams_upr
+
+##unique(teams_lwr$teamID)
+
+```
+<div style="text-align: justify;">
+
+&nbsp; 
+
+<u>Comments</u>
+
+1. I observed that points with higher ranks (mostly Rank 1 to 3) tend to lie above the linear model smooth line which indicates a potential positive relationship between team rank and mean salaries. We can infer that teams achieving better ranks allocate more resources toward player salaries comparative to teams with lower ranks. However, further analysis and consideration of other influencing factors are important to comprehensively validate this relationship. 
+
+2. Around the black regression line is a fairly visible grey band that indicates the confidence band which is the uncertainty around the mean at each yearID. Also, this implies that the data we have observed could reasonably come from any other regression line that fits inside the grey band.
+
+3. The prediction band is bordered by the pair of dashed red lines which takes account both the uncertainty in the estimate of the mean and the variance in the residuals.
+
+4. NYA team log mean salary lies outside the prediction band between the years 2002 to 2010 except for the year 2008.  While the teams BAL, CLE, COL, MON, PIT, FLO, MIN, TBA, and SDN have log mean salaries below the prediction band at different years.
+
+5. The table teams_lwr shows teams with Log of mean salary lower than the lower limit of the prediction interval while teams_upr shows teams with Log of mean salary higher than the upper limit of the prediction interval
+
+
+</div>
+
+
+
+&nbsp; 
+
+
+#  Multiple Regression for Count Data [35 points]
+
+<div style="text-align: justify;">
+
+&nbsp;  
+
+a. **Create a dataset 'df_FieldingData' from 'Fielding' by **
+
+     i. selecting data of the two years 1990 and 2015 (note that it is not all the years 1990 to 2015). 
+     ii. selecting playerID, year and position.
+
+    Then create a dataset 'df_BattingData' from the dataset 'Batting' by:
+
+    iii. selecting data of the two years 1990 and 2015, 
+    iv. adding height, weight, birthYear of players from 'People'. 
+    v. adding position played from 'df_FieldingData'
+    vi. creating a new variable 'age' equal to each player's age in the relevant year,
+    vii. dropping incomplete cases from the dataset and dropping unused levels of any categorical variable.
+    viii. remove duplication in players (i.e., each player's data is in a single row).
+                                                      
+    Use 'df_BattingData' for the rest of question 2. Note: use one code chunk for a. [4 points]
+    
+</div>
+    
+    
+```{r}
+
+
+### Create df_FieldingData table
+
+df_FieldingData <- Lahman::Fielding %>% 
+  filter(
+    yearID %in% c(1990, 2015)
+  ) %>% 
+  dplyr::select(playerID, yearID, POS)
+
+### Create df_BattingData table
+
+df_BattingData <- Lahman::Batting %>% 
+  filter(
+    yearID %in% c(1990, 2015)
+  ) %>%
+  left_join(Lahman::People %>% 
+  dplyr::select(playerID, height, weight, birthYear), join_by(playerID)) %>% 
+  left_join(df_FieldingData %>% 
+              dplyr::select(playerID, POS), join_by(playerID)) %>% 
+  mutate(
+    age = yearID - birthYear
+  ) %>% 
+  drop_na() %>% 
+  droplevels() %>% 
+  distinct(playerID, .keep_all = TRUE)
+
+
+  
+ 
+
+```
+    
+<div style="text-align: justify;">
+
+&nbsp;  
+  
+b. **Create a histogram of the number of runs scored for players. Next create a histogram of the number of runs for all players who have had a hit. Why it is more reasonable to create a Poisson data for the second set than the first. [3 points] **
+
+</div>
+
+
+```{r}
+
+## Histogram of number of runs scored for players
+
+hist_1 <- df_BattingData %>%
+  ggplot(aes(x = R)) +
+  geom_histogram() +
+  labs(
+    title = "Histogram of runs scored by players",
+    x = "Number of Runs Scored",
+    y = "Count"
+  ) +
+  theme_classic()
+
+## Histogram of number of runs scored for players who have had a hit
+
+hist_2 <- df_BattingData %>%
+  filter(
+    H > 0
+  ) %>% 
+  ggplot(aes(x = R)) +
+  geom_histogram() +
+  labs(
+    title = "Histogram of runs scored by players with a hit",
+    x = "Number of Runs Scored",
+    y = "Count"
+  ) +
+  theme_classic()
+
+hist_1
+hist_2
+
+
+
+```
+
+    
+<div style="text-align: justify;">
+
+&nbsp;  
+
+<u>Comments</u>
+
+1. By excluding players who had no hits reduces the skewness towards zero runs scored. Hence, this subset which indicates a more consistent and active participation in run-scoring activity aligns more closely with the assumptions of Poisson distribution for a more predictable rate of runs scored resulting in increase in the variance of runs scored as the mean hits increases compared to the entire player population, where many players players did not contribute to runs scoring activity due to having zero hits.
+
+</div>
+
+
+<div style="text-align: justify;">
+
+&nbsp;  
+
+c. **Excluding players who have had no hit, construct a Poisson model of the number of runs as a function of the number of hits, the year as a factor, position played and player height and age in the relevant year. Interpret the results and write the form of the fitted model (coefficients should be rounded to 2 significant figures). [8 points] **
+
+</div>
+
+```{r}
+
+## Transform Data
+
+df_BattingData_v1 <- df_BattingData %>%
+  filter(
+    H > 0
+  ) %>% 
+  mutate_at(vars(POS), list(factor))
+
+## Build Poisson model
+
+model2 <- glm(R ~ H + as_factor(yearID) + POS + height + age, data = df_BattingData_v1, family = "poisson")
+
+summary(model2)
+
+
+
+```
+<div style="text-align: justify;">
+
+&nbsp;  
+
+The fitted model is of the below form: 
+
+$$
+\begin{align}
+\mbox{R} \sim  Pois(exp( &1.53 + 0.01\times {\rm H}  
+   + 0.01 \times {\rm yearIDis2015}  -0.01\times {\rm POSis2B}  -0.09\times {\rm POSis3B}\\ 
+   &-0.17 \times {\rm POSisC} + 0.05\times {\rm POSisOF} - 1.71\times {\rm POSisP}  - 0.06\times {\rm POSisSS} \\ & +0.01 \times {\rm height} + 0.01\times {\rm age})).
+\end{align}
+$$
+ </div>
+ 
+ <div style="text-align: justify;">
+
+&nbsp;  
+
+<u>Model Interpretation</u>
+
+1. When all other variables are zero, the expected log counts of runs scored (R) is approximately 1.53
+
+2. For every successful increase in hits (H), while keeping other variables constant, the expected log counts of runs scored increases by approximately 0.01
+
+3. In the yearID 2015 in comparison to the base yearID 1990, the expected log count of runs scored increases by 0.01 provided other variables remain constant.
+
+4. For the Position 2B (Second Base) in comparison to the base Position 1B (First Base), the expected log count of runs scored decreases by 0.01 provided other variables remain constant.
+
+5. For the Position 3B (Third Base) in comparison to the base Position 1B (First Base), the expected log count of runs scored decreases by 0.09 provided other variables remain constant.
+
+6. For the Position C (Catcher) in comparison to the base Position 1B (First Base), the expected log count of runs scored decreases by 0.17 provided other variables remain constant.
+
+7. For the Position OF (Outfielder) in comparison to the base Position 1B (First Base), the expected log count of runs scored increases by 0.05 provided other variables remain constant.
+
+8. For the Position P (Pitcher) in comparison to the base Position 1B (First Base), the expected log count of runs scored decreases by 1.71 provided other variables remain constant.
+
+9. For the Position SS (Shortstop) in comparison to the base Position 1B (First Base), the expected log count of runs scored increases by 0.06 provided other variables remain constant.
+
+10. For each inch increase in player height (height), the expected log counts of runs scored increases by approximately 0.01 provided other variables remains constant
+
+11. For each year increase in player age (age), the expected log counts of runs scored increases by approximately 0.01 provided other variables remains constant
+
+</div>
+
+
+<div style="text-align: justify;">
+
+&nbsp;  
+
+
+d. **Find the p-value for each of the predictor variables in this model using analysis of variance. Interpret the results and mathematically explain what is meant by the p-value associated to each predictor. [5 points] **
+
+</div>
+
+```{r}
+
+Anova(model2)[3]
+
+```
+
+<div style="text-align: justify;">
+
+&nbsp;  
+
+<u>Interpretation</u>
+
+1. The p-value for the H (hits) predictor is $2 \times 10^{-16}$ which is lower than the p-value threshold of 0.05. Hence, we accept the alternate hypothesis that it is an important predictor of the expected log counts of runs scored. The p-value $2 \times 10^{-16}$ here compares the full model given with the reduced model including only yearID, POS, height and age. We do NOT conclude that the reduced model is better. Mathematically, the p-value indicates that the probability of the reduced model is better than the full model is 2 in every $10^{16}$ observations.
+
+2. The p-value for the yearID  predictor is 0.43 which is higher than the p-value threshold of 0.05. Hence, we reject the alternate hypothesis that it is an important predictor of the expected log counts of runs scored. The p-value 0.43 here compares the full model given with the reduced model including only H (hits), POS, height and age. We do conclude that the reduced model is better. Mathematically, the p-value indicates that the probability of the reduced model is better than the full model is 43 in every 100 observations.
+
+3. The p-value for the POS (position) predictor is $2 \times 10^{-16}$ which is lower than the p-value threshold of 0.05. Hence, we accept the alternate hypothesis that it is an important predictor of the expected log counts of runs scored. The p-value $2 \times 10^{-16}$ here compares the full model given with the reduced model including only yearID, H, height and age. We do NOT conclude that the reduced model is better. Mathematically, the p-value indicates that the probability of the reduced model is better than the full model is 2 in every $10^{16}$ observations.
+
+4. The p-value for the height predictor is $5.6 \times 10^{-3}$ which is lower than the p-value threshold of 0.05. Hence, we accept the alternate hypothesis that it is an important predictor of the expected log counts of runs scored. The p-value $5.6 \times 10^{-3}$ here compares the full model given with the reduced model including only yearID, POS, H (hits) and age. We do NOT conclude that the reduced model is better. Mathematically, the p-value indicates that the probability of the reduced model is better than the full model is 56 in every $10^{4}$ observations.
+
+5. The p-value for the age predictor is $2.4 \times 10^{-4}$ which is lower than the p-value threshold of 0.05. Hence, we accept the alternate hypothesis that it is an important predictor of the expected log counts of runs scored. The p-value $2.4 \times 10^{-4}$ here compares the full model given with the reduced model including only yearID, POS, H (hits) and height We do NOT conclude that the reduced model is better. Mathematically, the p-value indicates that the probability of the reduced model is better than the full model is 24 in every $10^{5}$ observations.
+
+</div>
+
+
+<div style="text-align: justify;">
+
+&nbsp;  
+
+
+e. **State and evaluate the assumptions of Poisson model. Comment on any weird pattern. [9 points]**
+
+</div>
+
+
+```{r}
+
+plot(model2, which = 3)
+
+## Excluding the pitchers from the dataset
+
+df_BattingData_v2 <- df_BattingData %>%
+  filter(
+    H > 0,
+    !(POS %in% c("P"))
+  ) %>% 
+  mutate_at(vars(POS), list(factor)) %>% droplevels()
+
+plot(glm(R ~ H + as_factor(yearID) + POS + height + age, data = df_BattingData_v2, family = "poisson"), which = 3)
+
+### Dispersion Test
+
+dispersiontest(model2, trafo = 1)
+
+### Linearity Test
+
+plot(model2, which = 1)
+
+
+### Normality Test
+
+plot(model2, which = 2)
+
+```
+
+<div style="text-align: justify;">
+
+&nbsp;  
+
+<u>Assumptions</u>
+
+1. Poisson models are used when response variable are discrete and are not negative values and variance = mean
+
+2. Poisson model assumes that equidispersion is satisfied (i.e there is no overdispersion or underdispersion).
+
+3. Linearity: We assumed that the linearity of the model is correct
+
+4. Normality: We assumed that the errors are normally distributed.
+
+5. Independence of observations
+
+<u>Assumptions Evaluation</u>
+
+1. Evaluating the assumption that variance = mean is reasonable for the dataset. To achieve this we created a plot of absolute value of residuals against predicted values and we observed that the plot (red line) is not flat due to the pitchers who contributed little to run scoring activity. Hence, when we excluded the pitchers we observed a roughly flat plot as shown in the second plot.
+
+2. Evaluating equidispersion assumption, true alpha (2.763484) is greater than 1 which suggest an overdispersion in the data. Hence, equidispersion assumption is not satisfied.
+
+3. Evaluating the Residuals vs Fitted, we observed that the plot does not look flat comparing the red line with the black dotted line. Hence, assumption is not satisfied.
+
+4. Normality: the Normal-QQ plot which compares the residuals to ideal normal observations shows residuals follow the line approximately and looks roughly like a straight line. Hence, the normality assumption is reasonable
+
+5. Independence of observations: We are unable to investigate (deviance) residual as a function of order of datapoints to check for "snaking" because we do not have the natural order in the dataset.
+
+</div>
+
+<div style="text-align: justify;">
+
+&nbsp;  
+
+
+f. **Now create a new model that includes teamID as a random effect. Ensure there are no fit warnings. What does the results tell us about the importance of team on number of runs that players score? [4 points] **
+
+</div>
+
+```{r}
+
+## Building Poisson model with random effect
+
+model3 <- glmer(R ~ H + as_factor(yearID) + POS + height + age + (1|teamID), data = df_BattingData_v1, family = "poisson", nAGQ = 0)
+
+model3
+
+```
+<div style="text-align: justify;">
+
+&nbsp; 
+
+<u>Comments</u>
+
+1. The output of the model indicates that the standard deviation of the effect of teamID on the expected log count of runs scored increases by 0.07 (2 Significant figure) provided other variables remain constant. Certainly, teamID is an important predictor contributing to the variability of the log count of runs scored
+
+</div>
+
+<div style="text-align: justify;">
+
+&nbsp; 
+
+g. **What is the mean number of runs could you expect 27-year-old, 85-inch-tall outfielders playing for the Cleveland Indians in 2015 with 50 hits to have scored? comment on the result. [2 points]** 
+
+</div>
+
+```{r}
+##Fetch the teamID for Cleveland Indians
+
+Lahman::Teams %>% 
+  filter(
+    name == "Cleveland Indians"
+  ) %>% 
+  dplyr::select(teamID) %>% 
+  unique()
+
+## Prediction
+
+predictInterval(model3, newdata = data.frame(age = 27, height = 85, POS = "OF", yearID = 2015, H = 50, teamID =  "CLE"), include.resid.var = FALSE) %>% 
+apply(2,exp)
+
+
+```
+
+<div style="text-align: justify;">
+
+&nbsp; 
+<u>Comments</u>
+
+1. The expected mean number of runs for a 27-year-old, 85-inch-tall outfielders playing for the Cleveland Indians in 2015 with 50 hits is 21 runs (approximated to the nearest whole number).
+
+2. The estimated confidence intervals for the mean number of runs expected of a 27-year-old, 85-inch-tall outfielders playing for the Cleveland Indians in 2015 with 50 hits ranges between 20 runs to 22 runs (approximated to the nearest whole number).
+
+</div>
+
+
+
+#  Lasso Regression for Logistic Regression [30 points]
+
+<div style="text-align: justify;">
+
+a.	 **From 'Teams' dataset, create a new dataset, df_DivWinners, by choosing data from the years 1990 to 2015 and removing all the variables that are team identifiers in the dataset, as well as 'lgID', 'Rank','franchID','divID', 'WCWin','LgWin','WSwin','name' and 'park'. Drop incomplete cases from the dataset 'df_DivWinners'. Split the resulting into a 80% training and a 20% testing set so that the variable 'DivWin' is balanced between the two datasets. Use the seed 123. [3 points]**
+
+</div>
+
+```{r}
+
+## Create the df_DivWinners dataset
+
+df_DivWinners <- Lahman::Teams %>% 
+  filter(
+    yearID >= 1990 & yearID <= 2015
+  ) %>%
+  dplyr::select(-teamID,-teamIDBR, -teamIDlahman45, -teamIDretro, - lgID, -Rank, -franchID, -divID, -WCWin, -LgWin, -WSWin, -name, -park) %>% 
+  drop_na() %>% 
+  mutate_at(vars(DivWin), list(factor))
+
+## Set seed
+set.seed(123)
+
+## Split data to training and test set
+
+training_samples <- df_DivWinners$DivWin %>% 
+  createDataPartition(p = 0.8, list = FALSE)
+
+## Train dataset
+train_data <- df_DivWinners[training_samples,]
+
+## Test dataset
+test_data <- df_DivWinners[-training_samples,]
+
+
+```
+
+<div style="text-align: justify;">
+
+&nbsp; 
+
+b. **Use the training data to fit a logistic regression model using the 'glmnet' command (use 'DivWin' as the response variable and the rest of variables as predictors). Plot residual deviance against number of predictors. Comment on the result. [3 points]**
+
+</div>
+
+```{r}
+
+## Transform variables
+
+Div_Win <- as.vector(train_data$DivWin)
+predictors <- model.matrix(~.-1, train_data[,-6])
+
+## Build Model
+model4 <- glmnet( predictors, Div_Win, family = "binomial")
+
+## Plt Residual variance
+plot(model4, xvar = "dev")
+
+## Suitable variables selected
+
+df_dev <- coef(model4, s = 0.023540)
+df_dev@Dimnames[[1]][1 + df_dev@i]
+
+
+```
+
+<div style="text-align: justify;">
+
+&nbsp; 
+
+<u>Comments</u>
+
+1. The plot of residual deviance against number of predictors of our fitted model indicates that with just 3 nonzero coefficients other than the intercept, about 53% of the devariance of Div_Win (response variable) is explained. These variables are "W", "L" and "attendance"
+
+</div>
+
+
+<div style="text-align: justify;">
+
+&nbsp; 
+
+c. **Now use cross-validation to choose a moderately conservative model. State the variables you will include. [3 points]**
+
+</div>
+
+
+```{r}
+
+## Set seed
+
+set.seed(321)
+
+## Cross Validation
+
+model_cv <- cv.glmnet(predictors, Div_Win, family = "binomial")
+
+plot(model_cv)
+
+##Variable Selection
+
+## Additional variable based on the higher value of lambda
+
+df_dev_cv <- coef(model4, s = model_cv$lambda.1se)
+setdiff(df_dev_cv@Dimnames[[1]][1 + df_dev_cv@i], df_dev@Dimnames[[1]][1 + df_dev@i])
+
+df_dev_max <- coef(model4, s = model_cv$lambda.min)
+
+## Additional variable based on the minimum value of lambda
+
+df_dev_max@Dimnames[[1]][1 + df_dev_max@i]
+
+
+
+
+
+
+
+```
+
+<div style="text-align: justify;">
+
+&nbsp; 
+
+<u>Comments</u>
+
+1. Using cross-validation, i discovered that with a higher lambda value, the variables "W," "L," and "attendance" significantly enhance the model's performance when applied to a new dataset. Conversely, at the minimum lambda value, the identified variables that contribute to the model performance enhancement are "W," "L," "attendance," "CS," "X2B," "HBP," "CG," "BBA," and "BPF." 
+
+2. I observed that three variables account for 53% of the variation in the Div_Win variable, while nine variables explain 56% of its variation. Since the difference in explained variation between the three and nine variables is not substantial, and adhering to a conservative approach in variable selection, I'll construct the model using only three variables: "W," "L," and "attendance."
+
+</div>
+
+<div style="text-align: justify;">
+
+&nbsp; 
+
+
+d. **Fit the model on the training data using glm(), interpret the results and write the form of the model (coefficients should be rounded to 2 significant figures). Then predict on the testing data. Plot comparative ROC curves and summarise your findings. [9 points] **
+
+</div>
+
+```{r}
+
+## Model Building
+ model5 <- glm(DivWin ~ W + L + attendance, data = train_data, family = "binomial" )
+
+model5
+
+summary(train_data$attendance)
+
+
+## Prediction with the model
+prob_DivWin <- predict(model5, newdata = test_data, type = "response")
+
+## ROC Building
+
+roc_DivWin <- roc(response = test_data$DivWin, predictor = prob_DivWin, auc = TRUE)
+
+# ROC Curve
+
+ggroc(roc_DivWin) +
+  geom_abline(aes(intercept = 1, slope = 1)) +
+  annotate(geom = "text", x = 0.25, y = 0.25, label= paste("AUC =", round(auc(roc_DivWin), 3)), colour = "blue" )+
+  labs(
+    title =  "Receiver Operating Characteristic (ROC) curve"
+  ) +
+  theme_classic()
+
+
+```
+
+<div style="text-align: justify;">
+
+&nbsp; 
+
+The fitted model is of the below form: 
+
+$$
+\begin{align}
+\mbox{DivWin} \sim  B(inverse \ logit( &1.72 + 0.12\times {\rm W}  
+   - 0.21 \times {\rm L}  +0.00\times {\rm attendance} ),\ 1).
+\end{align}
+$$
+<u>Model Interpretation</u>
+
+1. For each additional win (W), the log-odds of winning the division (DivWin) increases by 0.12 provided all other variables remain constant
+
+2. For each additional loss (L), the log-odds of winning the division decreases by 0.21 provided all other variables remain constant
+
+3. The coefficient associated with attendance is $6.4 \times 10^{-7}$ which is very small, this is explained by the large value of train data attendance variable which have mean value of **2,370,794** and minimum and maximum value of **642,745** and **4,483,350** respectively.  Using the mean attendance value of **2,370,794** the log-odds of winning the division increases by 1.52 provided all other variables remain constant. 
+
+4. The intercept of 1.72 indicates the log-odds of winning the division when all predictors are at zero.
+
+
+<u>Findings on ROC Curve</u>
+
+1. The ROC curve shows the graphical representation of the model performance at different threshold settings.
+
+2. The ROC curve analysis resulted in an area under the curve (AUC) of 0.942, indicating excellent performance of the model in accurately distinguishing between teams winning and not winning their division based on the provided predictors (W, L, and attendance).
+
+</div>
+
+<div style="text-align: justify;">
+
+&nbsp; 
+
+
+e. **Find Youden's index for the training data and calculate confusion matrices at this cutoff for both training and testing data.  Comment on the quality of the model. [6 points]**
+
+</div>
+
+```{r}
+
+## Youden's index
+youden_DivWin <- coords(roc_DivWin,"b",best.method = "youden", transpose = TRUE) 
+
+youden_DivWin
+
+## Confusion Matrix for training Dataset
+
+train_data$prediction <- ifelse(predict(model5, newdata = train_data, type = "response") >= 0.1752019,"Y", "N")
+
+table(train_data$prediction, train_data$DivWin)
+
+
+
+
+## Confusion Matrix for test Dataset
+
+test_data$prediction <- ifelse(predict(model5, newdata = test_data, type = "response") >= 0.1752019,"Y", "N")
+
+table(test_data$prediction, test_data$DivWin)
+
+
+
+```
+<div style="text-align: justify;">
+
+&nbsp; 
+
+<u>Model Quality</u>
+
+1. From the confusion matrix of our training data set, the sensitivity of our model using Youden's index cut-off to correctly predict the  odds of winning the division is 0.96 (109/114) while the specificity is  0.86 (405/471).
+
+$sensitivity \ + \ specificity = \ 0.96 \ + 0.86 \ = \ 1.82$
+
+The above value is greater than the value of 1 we get for free with no model at all. Which indicates 82% overall improvement in correct classifications.
+
+2. From the confusion matrix of our test data set, the sensitivity of our model using Youden's index cut-off to correctly predict the  odds of winning the division is 0.93 (26/28) while the specificity is  0.82 (96/117).
+
+$sensitivity \ + \ specificity = \ 0.93 \ + 0.82 \ = \ 1.75$
+
+The above value is greater than the value of 1 we get for free with no model at all. Which indicates 75% overall improvement in correct classifications.
+
+3. It is safe to say the the model built has a good quality based on the calculated sensitivity and specificity
+
+</div>
+
+
+<div style="text-align: justify;">
+
+&nbsp; 
+
+f. **Calculate the sensitivity+specificity on the testing data as a function of divID and plot as a bar chart. Comment on the result. [6 points]**
+
+</div>
+
+
+```{r}
+
+## Create a new variable of unique_ID
+
+div <- Lahman::Teams %>% 
+  mutate(
+    unique_id = paste(attendance, W, L, yearID, DivWin, G, Ghome, R, AB, H, sep = "_")
+  )
+
+## Transformation
+
+test_data_divID <- test_data %>%
+  mutate(
+    unique_id = paste(attendance, W, L, yearID, DivWin, G, Ghome, R, AB, H, sep = "_")
+  ) %>% 
+  left_join(div %>% select(divID, unique_id), join_by(unique_id))
+
+
+## Plot of Sensitivity + Specificity
+
+
+test_data_divID %>% 
+  group_by(divID) %>% 
+  summarise(
+      sensitivity_specificity = 
+        
+        (sum(prediction == "Y" & DivWin == "Y") / sum(DivWin == "Y")) ### Sensitivity
+      + 
+        (sum(prediction == "N" & DivWin == "N") / sum(DivWin == "N"))  ### Specificity
+      ) %>% 
+  ggplot(aes(x = divID, y = sensitivity_specificity)) +
+  geom_col( fill = "green4", alpha = 0.7) +
+  theme_classic() +
+  labs(
+    title = "Model Quality Perfomance Across Divisions",
+    subtitle = "Model has a better performance quality on the test data for the W division",
+    x = "Divisions",
+    y = "Sensitivity + Specificity"
+  )
+
+
+  
+  
+
+```
+
+<div style="text-align: justify;">
+
+&nbsp; 
+
+<u>Comments</u>
+
+1. Evaluating the quality of the model performance as a function of the divID (Division) on the test data set, Division "W" has the highest sum of sensitivity and specificity with a value of 1.82 (2 significant figure) while Division "E" and "C" have values of 1.80 and 1.69 respectively. Hence, the model has a better performance quality on the test data for division "W" comparative to other divisions.
+
+</div>
+
+
